@@ -66,7 +66,7 @@ class Editor():
                 m for m in self.allMeshes 
                 if m.bead in neigboursToSelected and m not in self.selected
         ]
-        self.selected.extend(neigbourMeshes)
+        self.selected.update(neigbourMeshes)
         for beadMesh in neigbourMeshes:
             beadMesh.material.color = self.selectedBeadColor
         self.coord_label.value = "{} beads selected".format(len(self.selected))
@@ -84,8 +84,14 @@ class Editor():
     def clearSelection(self):
         for beadMesh in self.selected:
             beadMesh.material.color = self.beadColor
-        self.selected[:] = []
+        self.selected.clear()
         self.coord_label.value = "{} beads selected".format(len(self.selected))
+        
+    def selectBeadByFunction(self, f):
+        for m in self.allMeshes:
+            if f(m.bead):
+                self.selected.add(m)
+                m.material.color = self.selectedBeadColor
     
     def updateLines(self):
         for x in sum(
@@ -124,7 +130,7 @@ class Editor():
     def selectBead(self, change):
         beadMesh = change.owner.object
         if beadMesh not in self.selected and beadMesh is not None:
-            self.selected.append(beadMesh)
+            self.selected.add(beadMesh)
             beadMesh.material.color = self.selectedBeadColor
         else:
             self.selected.remove(beadMesh)
@@ -144,10 +150,11 @@ class Editor():
             ) if x.type is 'Mesh']
     
     def simulate(self):
-        name = self.filename.split('.')[0]
-        self.model.simulate(output_name = name, directory='sim',
+        self.name = self.filename.split('.')[0]
+        self.model.simulate(output_name = self.name, directory='sim_'+self.name,
                    num_steps=1e5, output_period=1e4)
-        coords = readArbdCoords('sim/output/{}.restart'.format(name))
+        coords = readArbdCoords('{}/output/{}.restart'.format(
+                'sim_'+self.name, self.name))
         print("Loaded a {}-by-{} numpy array of coordinates".format(
                 *coords.shape)
         )
@@ -169,7 +176,7 @@ class Editor():
         self.allMeshes = [x for x in sum((
                 segment.children for segment in self.selectable.children), ()
                 ) if x.type is 'Mesh']
-        self.selected = []
+        self.selected = set()
     
     
     def getView(self, regenerateView = False,
@@ -213,6 +220,18 @@ class Editor():
                     HBox([selDecrButton, selIncrButton])
             ])
         return self.view
+
+    def vmd(self, *args):
+        import subprocess
+        import sys
+        cmd = ['vmd']
+        for a in args:
+            cmd.extend( a.split() )
+        print("Calling '{}'".format( " ".join(cmd) ))
+        process = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, universal_newlines=True)
+        for line in process.stdout:
+            sys.stdout.write(line)
+            sys.stdout.flush()
     
-    
-    
+    def viewInVMD(self):
+        self.vmd('-e','load-mrdna.tcl','-args','sim_'+self.name)
